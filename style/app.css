@@ -51,10 +51,8 @@ body {
 .options,
 .select {
     display: block;
-    position: absolute;
     left: 50%;
     bottom: 15px;
-    transform: translate(-50%);
     z-index: 1;
     margin: 0;
     padding: 0;

@@ -4,7 +4,6 @@
 <head>
     <meta charset="UTF-8">
     <title>Wolfshoes Configurator</title>
-    <link rel="stylesheet" href="../styles/sketchfab.css" media="screen">
     <link rel="stylesheet" type="text/css" href="style/app.css">
 
     <script type="text/javascript" src="https://static.sketchfab.com/api/sketchfab-viewer-1.12.1.js"></script>
@@ -21,16 +20,18 @@
         <div class="panel">
             <div class="viewer">
                 <iframe src="" id="api-frame" allowfullscreen mozallowfullscreen="true" webkitallowfullscreen="true" width="640" height="480"></iframe>
-                <form class="options"></form>
+
             </div>
             <div class="sidebar">
-                <ul>
+                <ul class="options">
                 </ul>
             </div>
         </div>
     </div>
 
     <script>
+        var switchablePrefixes = ['ROCKET', 'LABLE'];
+
         function getParameterByName(name) {
             name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
             var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
@@ -41,7 +42,7 @@
         var iframe = document.getElementById('api-frame');
         var url = getParameterByName('urlid');
         var prefix = getParameterByName('prefix');
-        var DEFAULT_URLID = '51cd261011fc496a87af9971bb1adda1';
+        var DEFAULT_URLID = '74d83d112cdd4597bbcd5ca898d1ab44';
         var DEFAULT_PREFIX = 'seat ';
         var CONFIG = {
             urlid: url !== '' ? url : DEFAULT_URLID,
@@ -68,8 +69,6 @@
                         api.addEventListener('viewerready', function () {
                             this.api = api;
                             this.initializeOptions(function () {
-                                console.log('Found the following options:', this.options);
-                                this.selectOption(0);
                                 UI.init(this.config, this.options);
                             }.bind(this));
                         }.bind(this));
@@ -84,7 +83,7 @@
              * Initialize options from scene
              */
             initializeOptions: function initializeOptions(callback) {
-                this.api.getNodeMap(function (err, nodes) {
+                this.api.getNodeMap((err, nodes) => {
                     if (err) {
                         console.error(err);
                         return;
@@ -94,33 +93,43 @@
                     var keys = Object.keys(nodes);
                     for (var i = 0; i < keys.length; i++) {
                         node = nodes[keys[i]];
-                        isOptionObject = node.name &&
-                            node.name.indexOf(this.config.prefix) !== -1 &&
-                            (node.type === 'Geometry' || node.type === 'Group');
+                        isOptionObject = (node.type === 'Geometry' || node.type === 'Group');
                         if (isOptionObject) {
-                            this.options.push({
-                                id: node.instanceID,
-                                name: node.name,
-                                selected: false
-                            });
+                            console.log('Found the following node:', node);
+                            var foundPrefix = switchablePrefixes.find(prefix => node.name.startsWith(prefix));
+                            if (foundPrefix) {
+                                var opt = this.options.find(opt => opt.name === foundPrefix);
+                                if (opt) {
+                                    opt.nodeIds.push(node.instanceID);
+                                } else {
+                                    this.options.push({
+                                        nodeIds: [node.instanceID],
+                                        name: foundPrefix,
+                                        selected: true
+                                    });
+                                }
+                            }
                         }
                     }
                     callback();
-                }.bind(this));
+                });
             },
 
             /**
              * Select option to show
              */
             selectOption: function selectOption(index) {
-                var options = this.options;
-                for (var i = 0, l = options.length; i < l; i++) {
-                    if (i === index) {
-                        options[i].selected = true;
-                        this.api.show(options[i].id);
-                    } else {
-                        options[i].selected = false;
-                        this.api.hide(options[i].id);
+                var option = this.options[index];
+
+                if (option.selected) {
+                    option.selected = false;
+                    for (var j = 0; j < option.nodeIds.length; j++) {
+                        this.api.hide(option.nodeIds[j]);
+                    }
+                } else {
+                    option.selected = true;
+                    for (var j = 0; j < option.nodeIds.length; j++) {
+                        this.api.show(option.nodeIds[j]);
                     }
                 }
             }
@@ -136,13 +145,13 @@
                 this.render();
                 this.el.addEventListener('change', function (e) {
                     e.preventDefault();
-                    var index = parseInt(this.el.elements['color'].value, 10);
+                    var index = parseInt(e.srcElement.value, 10);
                     this.select(index);
                 }.bind(this));
             },
 
             select: function (index) {
-                Configurator.selectOption(parseInt(index, 10));
+                Configurator.selectOption(index);
                 this.render();
             },
 
@@ -155,17 +164,17 @@
             },
 
             /**
-             * Render options as multiple `<input type="radio">`
+             * Render options as multiple `<input type="checkbox">`
              */
             renderRadio: function render() {
                 var html = this.options.map(function (option, i) {
                     var checkedState = option.selected ? 'checked="checked"' : '';
                     var className = option.name.replace(this.config.prefix, '');
                     return [
-                        '<label class="options__option">',
-                        '<input type="radio" name="color" value="' + i + '" ' + checkedState + '>',
+                        '<li><label>',
+                        '<input type="checkbox" name="part_' + option.name +'" value="' + i + '" ' + checkedState + '>',
                         '<span class="' + className + '">' + option.name + '</span>',
-                        '</label>'
+                        '</label></li>'
                     ].join('');
                 }.bind(this)).join('');
                 this.el.innerHTML = html;
