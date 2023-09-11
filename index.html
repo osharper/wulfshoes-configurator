@@ -22,15 +22,82 @@
                 <iframe src="" id="api-frame" allowfullscreen mozallowfullscreen="true" webkitallowfullscreen="true" width="640" height="480"></iframe>
 
             </div>
-            <div class="sidebar">
+            <div class="sidebar" style="max-width: 100vw; overflow: auto;">
                 <ul class="options">
                 </ul>
+                <div class="config">
+
+                </div>
             </div>
         </div>
     </div>
 
     <script>
         var switchablePrefixes = ['ROCKET', 'LABLE'];
+        var materialsList = [
+            {
+                id: 'fabric',
+                name: 'Fabric',
+                colors: [
+                    {
+                        id: 'blue',
+                        name: 'Blue',
+                        value: [0.0, 0.0, 1.0],
+                    },
+                    {
+                        id: 'green',
+                        name: 'Green',
+                        value: [0.0, 1.0, 0.0],
+                    },
+                ],
+                textures: {
+                    RoughnessPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/Fabric041_4K_Roughness.jpg' },
+                    NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/Fabric041_4K_Normal.jpg' },
+                }
+            },
+            {
+                id: 'rope',
+                name: 'Rope',
+                colors: [
+                    {
+                        id: 'black',
+                        name: 'Black',
+                        value: [0.0, 0.0, 0.0],
+                    },
+                    {
+                        id: 'white',
+                        name: 'White',
+                        value: [0.95, 0.95, 0.95],
+                    },
+                ],
+                textures: {
+                    NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/FabricRope001_NRM_3K.jpg' },
+                    AOPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/FabricRope001_AO_3K.jpg' },
+                    GlossinessPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/FabricRope001_GLOSS_3K.jpg' },
+                }
+            },
+            {
+                id: 'leather',
+                name: 'Leather',
+                colors: [
+                    {
+                        id: 'red',
+                        name: 'Red',
+                        value: [1.0, 0.0, 0.0],
+                    },
+                    {
+                        id: 'brown',
+                        name: 'Brown',
+                        value: [150/256, 83/256, 28/256],
+                    },
+                ],
+                textures: {
+                    RoughnessPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/leather_red_02_rough_4k.jpg' },
+                    NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/leather_red_02_nor_4k.jpg' },
+                    AOPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/leather_red_02_ao_4k.jpg' },
+                }
+            }
+        ];
 
         function getParameterByName(name) {
             name = name.replace(/[\[]/, "\\[").replace(/[\]]/, "\\]");
@@ -52,7 +119,11 @@
         var Configurator = {
             api: null,
             config: null,
+
             options: [],
+            materializedParts: [],
+
+            materials: [],
 
             /**
              * Initialize viewer
@@ -69,16 +140,39 @@
                         api.addEventListener('viewerready', function () {
                             this.api = api;
                             this.initializeOptions(function () {
-                                UI.init(this.config, this.options);
+                                UI.init(this.config, this.options, this.materializedParts);
                             }.bind(this));
+
+                            this.initializeMaterialOptions(function () {
+                                console.log('Materials loaded');
+                            }.bind(this));
+
+                            materialsList.forEach((material) => {
+                                // loop through textures and create each one
+                                for (var key in material.textures) {
+                                    var texture = material.textures[key];
+                                    this.addTexture(material.textures[key]);
+                                }
+                            });
                         }.bind(this));
                     }.bind(this),
+
                     error: function onError() {
                         console.log('Viewer error');
                     }
                 });
             },
 
+            addTexture: function addTexture(texture, callback) {
+                this.api.addTexture(texture.url, (err, id) => {
+                    if (err) {
+                        console.error(err);
+                        return;
+                    }
+                    texture.uid = id;
+                    callback && callback();
+                });
+            },
             /**
              * Initialize options from scene
              */
@@ -96,6 +190,11 @@
                         isOptionObject = (node.type === 'Geometry' || node.type === 'Group');
                         if (isOptionObject) {
                             console.log('Found the following node:', node);
+
+                            if (node.materialID) {
+                                this.materializedParts.push({ name: node.name, node, materialID: node.materialID });
+                            }
+
                             var foundPrefix = switchablePrefixes.find(prefix => node.name.startsWith(prefix));
                             if (foundPrefix) {
                                 var opt = this.options.find(opt => opt.name === foundPrefix);
@@ -111,6 +210,19 @@
                             }
                         }
                     }
+                    callback();
+                });
+            },
+
+            initializeMaterialOptions: function initializeMaterialOptions(callback) {
+                this.api.getMaterialList((err, materials) => {
+                    if (err) {
+                        console.error(err);
+                        return;
+                    }
+
+                    this.materials = materials;
+
                     callback();
                 });
             },
@@ -132,42 +244,183 @@
                         this.api.show(option.nodeIds[j]);
                     }
                 }
+            },
+
+            setDefaultMaterial: function setDefaultMaterial(partId) {
+                var part = this.materializedParts.find(function (p) {
+                    return p.name === partId;
+                });
+
+                this.api.assignMaterial(part.node, part.materialID);
+            },
+
+            changeMaterial: function changeMaterial(partId, textureId, colorId) {
+
+                var texture = materialsList.find(function (material) {
+                    return material.id.toLowerCase() === textureId.toLowerCase();
+                });
+
+                if (!texture) {
+                    console.error('Texture not found', textureId);
+                    return;
+                }
+
+                var color = texture.colors.find(function (color) {
+                    return color.id.toLowerCase() === colorId.toLowerCase();
+                });
+
+                if (!color) {
+                    console.error('Color not found', colorId);
+                    return;
+                }
+
+
+                var part = this.materializedParts.find(function (p) {
+                    return p.name === partId;
+                });
+
+                if (!part) {
+                    console.error('Part not found', partId);
+                    return;
+                }
+
+                var material = this.materials.find(function (material) {
+                    return material.id === part.materialID;
+                });
+
+                if (!material) {
+                    console.error('Material not found', part.materialID);
+                    return;
+                }
+
+                var copy = JSON.parse(JSON.stringify(material));
+                delete copy.id;
+                copy.name += '_' + textureId + '_' + colorId;
+
+                copy.channels.AlbedoPBR.color = color.value;
+                for (var key in texture.textures) {
+                    copy.channels[key] = {
+                        "enable": true,
+                        "factor": 1,
+                        "flipY": true,
+                        "UVTransforms": {
+                            "scale": [1, 1],
+                            "offset": [0, 0],
+                            "rotation": 0
+                        },
+                        "texture": {
+                            "magFilter": "LINEAR",
+                            "minFilter": "LINEAR_MIPMAP_LINEAR",
+                            "wrapS": "REPEAT",
+                            "wrapT": "REPEAT",
+                            "textureTarget": "TEXTURE_2D",
+                            "internalFormat": "RGB",
+                            "uid": texture.textures[key].uid,
+                        }
+                    };
+                }
+
+                this.api.createMaterial(copy, function(err, newMaterial) {
+                    if (err) {
+                        console.error(err);
+                        return;
+                    }
+                    this.api.assignMaterial(part.node, newMaterial.id);
+                }.bind(this));
             }
         }
 
         var UI = {
             config: null,
             options: null,
-            init: function init(config, options) {
+            init: function init(config, options, materializedParts) {
                 this.config = config;
                 this.options = options;
-                this.el = document.querySelector('.options');
-                this.render();
-                this.el.addEventListener('change', function (e) {
+
+                var el = document.querySelector('.options');
+                this.render(el, options);
+                el.addEventListener('change', function (e) {
                     e.preventDefault();
                     var index = parseInt(e.srcElement.value, 10);
                     this.select(index);
                 }.bind(this));
+
+                el = document.querySelector('.config');
+                this.renderConfig(el, materializedParts);
             },
 
             select: function (index) {
                 Configurator.selectOption(index);
-                this.render();
             },
 
-            render: function () {
+            render: function (el, options) {
                 if (this.config.urlid === DEFAULT_URLID) {
-                    this.renderRadio();
+                    this.renderCheckbox(el, options);
                 } else {
-                    this.renderSelect();
+                    this.renderSelect(el, options);
                 }
+            },
+
+            renderConfig: function (el, materializedParts) {
+                var html = materializedParts.map(function (part) {
+                    return [
+                        '<div class="config__part">',
+                        '<input type="hidden" name="partId" value="' + part.name + '"> ',
+                        '<h2>' + part.name + '</h2>',
+                        '<div class="config__part__material">',
+                        '<div class="config__part__material__texture">',
+                        '<span>Texture</span>',
+                        '<select name="texture">',
+                        '<option value="none">Default</option>',
+                        '<option value="fabric">Fabric</option>',
+                        '<option value="rope">Rope</option>',
+                        '<option value="leather">Leather</option>',
+                        '</select>',
+                        '</div>',
+                        '<div class="config__part__material__color">',
+                        '<span>Color</span>',
+                        '<select name="color">',
+                        '<option value="-1">Default</option>',
+                        '</select>',
+                        '</div>',
+                        '</div>',
+                        '</div>'
+                    ].join('');
+                }.bind(this)).join('');
+                el.innerHTML = html;
+
+                el.addEventListener('change', function (e) {
+                    e.preventDefault();
+                    var name = e.srcElement.name;
+                    var value = e.srcElement.value;
+
+                    var partRootEl = e.srcElement.parentElement.parentElement.parentElement;
+                    var partId = partRootEl.querySelector('input[name="partId"]').value;
+
+                    if (name == 'texture') {
+                        var texture = materialsList.find(function (material) {
+                            return material.id.toLowerCase() === value.toLowerCase();
+                        });
+
+                        if (!texture) {
+                            Configurator.setDefaultMaterial(partId);
+                        }
+
+                        this.renderColorOptions(partRootEl.querySelector('select[name="color"]'), (texture && texture.colors) || []);
+                    } else if (name == 'color') {
+                        var textureId = partRootEl.querySelector('select[name="texture"]').value;
+                        var color = value.toLowerCase();
+
+                        Configurator.changeMaterial(partId, textureId, color);
+                    }
+                }.bind(this));
             },
 
             /**
              * Render options as multiple `<input type="checkbox">`
              */
-            renderRadio: function render() {
-                var html = this.options.map(function (option, i) {
+            renderCheckbox: function render(el, options) {
+                var html = options.map(function (option, i) {
                     var checkedState = option.selected ? 'checked="checked"' : '';
                     var className = option.name.replace(this.config.prefix, '');
                     return [
@@ -177,14 +430,14 @@
                         '</label></li>'
                     ].join('');
                 }.bind(this)).join('');
-                this.el.innerHTML = html;
+                el.innerHTML = html;
             },
 
             /**
              * Render option as `<select>`
              */
-            renderSelect: function () {
-                var html = this.options.map(function (option, i) {
+            renderSelect: function (el, options) {
+                var html = options.map(function (option, i) {
                     var checkedState = option.selected ? 'selected="selected"' : '';
                     return [
                         '<option value="' + i + '" ' + checkedState + '>',
@@ -192,7 +445,19 @@
                         '</option>',
                     ].join('');
                 }).join('');
-                this.el.innerHTML = '<select name="color">' + html + '</select>';
+                el.innerHTML = '<select name="color">' + html + '</select>';
+            },
+
+            renderColorOptions: function (el, colors) {
+                var html = colors.map(function (color, i) {
+                    var checkedState = color.selected ? 'selected="selected"' : '';
+                    return [
+                        '<option value="' + color.id + '" ' + checkedState + '>',
+                        color.name,
+                        '</option>',
+                    ].join('');
+                }).join('');
+                el.innerHTML = '<option value="none" selected="selected">Select color</option>' + html;
             }
         }
 
