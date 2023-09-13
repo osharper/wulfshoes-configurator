@@ -42,14 +42,15 @@
                     {
                         id: 'blue',
                         name: 'Blue',
-                        value: [0.0, 0.0, 1.0],
+                        value: [0.204, 0.365, 0.647],
                     },
                     {
                         id: 'green',
                         name: 'Green',
-                        value: [0.0, 1.0, 0.0],
+                        value: [0.227, 0.459, 0.294],
                     },
                 ],
+                fromMaterial: 'INSIDE',
                 textures: {
                     RoughnessPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/Fabric041_4K_Roughness.jpg' },
                     NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/Fabric041_4K_Normal.jpg' },
@@ -70,6 +71,7 @@
                         value: [0.95, 0.95, 0.95],
                     },
                 ],
+                fromMaterial: 'LACES',
                 textures: {
                     NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/FabricRope001_NRM_3K.jpg' },
                     AOPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/FabricRope001_AO_3K.jpg' },
@@ -81,16 +83,17 @@
                 name: 'Leather',
                 colors: [
                     {
-                        id: 'red',
-                        name: 'Red',
-                        value: [1.0, 0.0, 0.0],
+                        id: 'pink',
+                        name: 'Pink',
+                        value: [0.651, 0.137, 0.139],
                     },
                     {
                         id: 'brown',
                         name: 'Brown',
-                        value: [150/256, 83/256, 28/256],
+                        value: [0.183, 0.054, 0.0057],
                     },
                 ],
+                fromMaterial: 'TOUNG',
                 textures: {
                     RoughnessPBR: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/leather_red_02_rough_4k.jpg' },
                     NormalMap: { url: 'https://osharper.github.io/wulfshoes-configurator/textures/leather_red_02_nor_4k.jpg' },
@@ -110,10 +113,8 @@
         var url = getParameterByName('urlid');
         var prefix = getParameterByName('prefix');
         var DEFAULT_URLID = '74d83d112cdd4597bbcd5ca898d1ab44';
-        var DEFAULT_PREFIX = 'seat ';
         var CONFIG = {
             urlid: url !== '' ? url : DEFAULT_URLID,
-            prefix: prefix !== '' ? prefix : DEFAULT_PREFIX
         };
 
         var Configurator = {
@@ -146,14 +147,6 @@
                             this.initializeMaterialOptions(function () {
                                 console.log('Materials loaded');
                             }.bind(this));
-
-                            materialsList.forEach((material) => {
-                                // loop through textures and create each one
-                                for (var key in material.textures) {
-                                    var texture = material.textures[key];
-                                    this.addTexture(material.textures[key]);
-                                }
-                            });
                         }.bind(this));
                     }.bind(this),
 
@@ -223,6 +216,15 @@
 
                     this.materials = materials;
 
+                    materialsList.forEach(m => {
+                        if (!m.fromMaterial) return;
+
+                        var material = materials.find(material => material.name === m.fromMaterial);
+                        m.template = JSON.parse(JSON.stringify(material));
+                        delete m.template.id;
+                        delete m.template.name;
+                    });
+
                     callback();
                 });
             },
@@ -255,7 +257,6 @@
             },
 
             changeMaterial: function changeMaterial(partId, textureId, colorId) {
-
                 var texture = materialsList.find(function (material) {
                     return material.id.toLowerCase() === textureId.toLowerCase();
                 });
@@ -293,38 +294,41 @@
                     return;
                 }
 
-                var copy = JSON.parse(JSON.stringify(material));
-                delete copy.id;
-                copy.name += '_' + textureId + '_' + colorId;
+                var copy = JSON.parse(JSON.stringify(texture.template));
+                copy.name = part.name + '_' + textureId + '_' + colorId;
 
-                copy.channels.AlbedoPBR.color = color.value;
-                for (var key in texture.textures) {
-                    copy.channels[key] = {
-                        "enable": true,
-                        "factor": 1,
-                        "flipY": true,
-                        "UVTransforms": {
-                            "scale": [1, 1],
-                            "offset": [0, 0],
-                            "rotation": 0
-                        },
-                        "texture": {
-                            "magFilter": "LINEAR",
-                            "minFilter": "LINEAR_MIPMAP_LINEAR",
-                            "wrapS": "REPEAT",
-                            "wrapT": "REPEAT",
-                            "textureTarget": "TEXTURE_2D",
-                            "internalFormat": "RGB",
-                            "uid": texture.textures[key].uid,
-                        }
-                    };
-                }
+                copy.channels.AlbedoPBR.color = color.AlbedoPBR || color.value;
+                copy.channels.DiffuseColor.color = color.DiffuseColor || color.value;
+                copy.channels.SpecularColor.color = color.SpecularColor || color.value;
+                copy.channels.DiffusePBR.color = color.DiffusePBR || color.value;
+                // for (var key in texture.textures) {
+                //     copy.channels[key] = {
+                //         "enable": true,
+                //         "factor": 1,
+                //         "flipY": true,
+                //         "UVTransforms": {
+                //             "scale": [1, 1],
+                //             "offset": [0, 0],
+                //             "rotation": 0
+                //         },
+                //         "texture": {
+                //             "magFilter": "LINEAR",
+                //             "minFilter": "LINEAR_MIPMAP_LINEAR",
+                //             "wrapS": "REPEAT",
+                //             "wrapT": "REPEAT",
+                //             "textureTarget": "TEXTURE_2D",
+                //             "internalFormat": "RGB",
+                //             "uid": texture.textures[key].uid,
+                //         }
+                //     };
+                // }
 
                 this.api.createMaterial(copy, function(err, newMaterial) {
                     if (err) {
                         console.error(err);
                         return;
                     }
+                    this.materials.push(newMaterial);
                     this.api.assignMaterial(part.node, newMaterial.id);
                 }.bind(this));
             }
@@ -422,7 +426,7 @@
             renderCheckbox: function render(el, options) {
                 var html = options.map(function (option, i) {
                     var checkedState = option.selected ? 'checked="checked"' : '';
-                    var className = option.name.replace(this.config.prefix, '');
+                    var className = option.name;
                     return [
                         '<li><label>',
                         '<input type="checkbox" name="part_' + option.name +'" value="' + i + '" ' + checkedState + '>',
