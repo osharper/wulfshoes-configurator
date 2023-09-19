@@ -4,8 +4,17 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 
-const app = createApp(App)
+function initVueApp(appElement) {
+    if (!appElement) {
+      console.warn('Element not found. Retrying or handling gracefully.');
+      return;
+    }
 
-app.use(createPinia())
+    const app = createApp(App);
 
-app.mount('#app')
+    app.use(createPinia())
+
+    app.mount(appElement);
+}
+
+initVueApp(document.getElementById('app'));
