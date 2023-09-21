@@ -40,8 +40,8 @@ export default {
       useSketchfabStore().selectMaterial(index);
     },
     removePart(doRemove) {
-      if (doRemove) useSketchfabStore().removePart(this.part);
-      else useSketchfabStore().restorePart(this.part);
+      if (doRemove) useSketchfabStore().removePart(this.part.id);
+      else useSketchfabStore().restorePart(this.part.id);
     },
   },
 };
@@ -66,13 +66,6 @@ export default {
 
 
 <style scoped>
-.sidebar {
-    overflow: auto;
-    flex: 0 0 20%;
-    overflow: auto;
-    display: flex;
-    flex-direction: column;
-}
 .sidebar-top {
     display: flex;
     justify-content: space-between;
@@ -83,17 +76,34 @@ export default {
 .sidebar .part-config {
     display: flex;
     flex-direction: row;
+    flex: 1 0 auto;
+    max-height: calc(100% - 6rem);
 }
 
 .sidebar-bottom {
-    padding: 1em;
-    border-top: 1px solid #dddddd;
-    margin-top: auto;
+  padding: 0.5rem;
+  border-top: 1px solid #dddddd;
+  margin-top: auto;
+  height: 10rem;
+  max-height: 20%;
+}
+
+.sidebar-bottom p {
+  text-overflow: ellipsis;
+}
+
+.sidebar {
+    overflow: auto;
+    display: flex;
+    position: relative;
+    flex-direction: column;
+    flex: 0 0 20%;
+    padding-left: 0.1em;
 }
 
 @media (min-width: 1024px) {
   .sidebar {
-    padding-left: 2em;
+    padding-left: 0.1em;
   }
 }
 </style>

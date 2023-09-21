@@ -32,8 +32,8 @@ export default {
 /* Add your styling for tab headers here */
 .part-selector {
   display: flex;
-  border-top: 1px solid #dddddd;
-  border-bottom: 1px solid #dddddd;
+  flex: 0 1 80%;
+  overflow: auto;
 }
 
 .part {

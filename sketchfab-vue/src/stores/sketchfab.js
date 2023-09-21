@@ -18,6 +18,7 @@ export const useSketchfabStore = defineStore('sketchfab', {
     materializedParts: [],
     materials: [],
     materialsList: [],
+    actionsHistory: [],
   }),
 
   getters: {
@@ -137,14 +138,51 @@ export const useSketchfabStore = defineStore('sketchfab', {
     selectColor(color) {
         this.activeColor = color;
 
-        this.activePart.nodes.forEach(node => {
-          this.changeMaterial(node, this.activeMaterial.id, this.activeColor.id);
-        });
+        this.setPartSelection(this.activePart.id, this.activeMaterial.id, this.activeColor.id);
 
-        this.activePart.selection = {
-          material: this.activeMaterial.id,
-          color: this.activeColor.id,
-        };
+        this.actionsHistory.push({ part: this.activePart.id, material: this.activeMaterial.id, color: this.activeColor.id });
+    },
+
+    setPartSelection(partId, materialId, colorId) {
+      const selection = {
+        material: this.activeMaterial.id,
+        color: this.activeColor.id,
+      };
+
+      if (this.activePart && this.activePart.id === partId) {
+        this.activePart.selection = selection
+      }
+
+      var part = this.parts.find(p => p.id === partId);
+      part.selection = selection;
+      part.nodes.forEach(node => this.changeMaterial(node, materialId, colorId));
+    },
+
+    resetActivePartSelection() {
+      this.resetPart(this.activePart.id);
+
+      this.actionsHistory.push({ part: this.activePart.id, material: 'default' });
+    },
+
+    async resetPart(partId) {
+      if (this.activePart && this.activePart.id === partId) {
+        this.activePart.selection = undefined;
+        this.selectMaterial(0);
+        this.activeColor = null;
+      }
+
+      var part = this.parts.find(p => p.id === partId);
+      part.selection = undefined;
+
+      for (var i = 0; i < part.nodes.length; i++) {
+        await this.setDefaultMaterial(part.nodes[i]);
+      }
+
+      await new Promise((resolve, reject) => this.api.getCameraLookAt(
+        (err, { position: p, target }) => err
+          ? reject(err)
+          : this.api.setCameraLookAt([p[0], p[1], p[2] + 0.01], target, 0.3, err => err ? reject(err) : resolve())
+      ));
     },
 
     async changeMaterial(partId, textureId, colorId) {
@@ -235,13 +273,13 @@ export const useSketchfabStore = defineStore('sketchfab', {
         (resolve, reject) => this.api.assignMaterial(
           toRaw(part.node),
           toRaw(part.materialID),
-          (err) => err ? reject(err) : resolve()
-        )
+          (err) => err ? reject(err) : resolve(),
+        ),
       );
     },
 
-    removePart(part) {
-      var index = this.parts.findIndex(p => p.id === part.id);
+    removePart(partId, omitHistory = false) {
+      var index = this.parts.findIndex(p => p.id === partId);
 
       if (index === -1) return;
 
@@ -250,10 +288,12 @@ export const useSketchfabStore = defineStore('sketchfab', {
       }
 
       this.parts[index].removed = true;
+
+      if (!omitHistory) this.actionsHistory.push({ part: this.activePart.id, removed: true });
     },
 
-    restorePart(part) {
-      var index = this.parts.findIndex(p => p.id === part.id);
+    restorePart(partId, omitHistory = false) {
+      var index = this.parts.findIndex(p => p.id === partId);
 
       if (index === -1) return;
 
@@ -262,6 +302,8 @@ export const useSketchfabStore = defineStore('sketchfab', {
       }
 
       this.parts[index].removed = false;
+
+      if (!omitHistory) this.actionsHistory.push({ part: this.activePart.id, removed: false });
     },
 
     getCustomizationDescription() {
@@ -273,5 +315,20 @@ export const useSketchfabStore = defineStore('sketchfab', {
 
       return descriptions.join(', ');
     },
+
+    undoAction() {
+      const lastAction = this.actionsHistory.pop();
+
+      if (!lastAction) return;
+
+      if (lastAction.removed !== undefined) {
+        lastAction.removed ? this.restorePart(lastAction.part, true) : this.removePart(lastAction.part, true);
+        return;
+      }
+
+      const prevAction = this.actionsHistory.findLast(a => a.part === lastAction.part);
+      if (!prevAction || prevAction.material === 'default') this.resetPart(lastAction.part);
+      else this.setPartSelection(prevAction.part, prevAction.material, prevAction.color);
+    }
   },
 });

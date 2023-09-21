@@ -48,10 +48,12 @@ export default {
 
 .material {
   cursor: pointer;
-  padding: 11px 20px 11px 10px;
+  padding: 11px 0 11px 10px;
   text-transform: uppercase;
   letter-spacing: 0.6px;
   display: block;
+  min-width: 10em;
+  width: fit-content;
 }
 
 .material.active {
